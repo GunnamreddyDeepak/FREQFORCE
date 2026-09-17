@@ -22,6 +22,17 @@ if config.config_file_name is not None:
 
 # Model metadata for 'autogenerate' support
 target_metadata = Base.metadata
+def include_object(
+    object_,
+    name,
+    type_,
+    reflected,
+    compare_to,
+):
+    """Exclude PostGIS extension-owned tables from application migrations."""
+    if type_ == "table" and reflected and name == "spatial_ref_sys":
+        return False
+    return True
 
 
 def run_migrations_offline() -> None:
@@ -34,8 +45,10 @@ def run_migrations_offline() -> None:
     context.configure(
         url=url,
         target_metadata=target_metadata,
+
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -54,7 +67,9 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
+
             compare_type=True,
+            include_object=include_object,
         )
 
         with context.begin_transaction():

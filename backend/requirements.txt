@@ -8,6 +8,7 @@ click==8.5.0
 cryptography==50.0.1
 ecdsa==0.19.2
 fastapi==0.141.1
+geoalchemy2==0.20.0
 greenlet==3.5.6
 h11==0.16.0
 httptools==0.8.0
