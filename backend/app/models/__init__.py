@@ -4,6 +4,7 @@ from app.models.commodity import Commodity
 from app.models.farmer import Farmer
 from app.models.procurement_centre import ProcurementCentre
 from app.models.user import User, UserRole
+from app.models.procurement_request import ProcurementRequest
 
 __all__ = [
     "User",
@@ -13,4 +14,5 @@ __all__ = [
     "Commodity",
     "CentreCommodity",
     "CentreCapacity",
+    "ProcurementRequest",
 ]

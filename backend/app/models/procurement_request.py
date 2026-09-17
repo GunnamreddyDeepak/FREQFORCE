@@ -1,0 +1,104 @@
+import uuid
+from datetime import date, datetime
+from typing import TYPE_CHECKING
+
+from geoalchemy2 import Geometry
+from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Uuid, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base_class import Base
+
+if TYPE_CHECKING:
+    from app.models.commodity import Commodity
+    from app.models.farmer import Farmer
+
+
+class ProcurementRequest(Base):
+    """Farmer request for procurement capacity."""
+
+    __tablename__ = "procurement_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid.uuid4,
+        comment="Authoritative procurement request UUID",
+    )
+
+    farmer_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("farmers.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+        comment="Farmer submitting the procurement request",
+    )
+
+    commodity_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("commodities.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+        comment="Requested commodity",
+    )
+
+    requested_quantity: Mapped[float] = mapped_column(
+        Numeric(12, 3),
+        nullable=False,
+        comment="Requested quantity in quintals",
+    )
+
+    preferred_date: Mapped[date] = mapped_column(
+        Date,
+        nullable=False,
+        index=True,
+        comment="Farmer's preferred procurement date",
+    )
+
+    farmer_location: Mapped[object] = mapped_column(
+        Geometry(
+            geometry_type="POINT",
+            srid=4326,
+            spatial_index=False,
+        ),
+        nullable=False,
+        comment="Request-time farmer location in WGS84",
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="REQUESTED",
+        index=True,
+        comment="Current procurement request workflow status",
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        comment="Request creation timestamp (UTC)",
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+        comment="Request last update timestamp (UTC)",
+    )
+
+    farmer: Mapped["Farmer"] = relationship(
+        "Farmer",
+    )
+
+    commodity: Mapped["Commodity"] = relationship(
+        "Commodity",
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<ProcurementRequest "
+            f"id={self.id} "
+            f"farmer_id={self.farmer_id} "
+            f"status={self.status}>"
+        )

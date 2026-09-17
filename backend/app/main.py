@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.db.session import check_database_connection, check_postgis_available
+from app.api.procurement_requests import router as procurement_requests_router
 
 logger = logging.getLogger("kisanqueue.main")
 
@@ -12,6 +13,8 @@ app = FastAPI(
     version=settings.VERSION,
     description="Intelligent Procurement Centre Orchestration Platform",
 )
+
+app.include_router(procurement_requests_router)
 
 
 @app.get("/health", summary="Basic service liveness check")
