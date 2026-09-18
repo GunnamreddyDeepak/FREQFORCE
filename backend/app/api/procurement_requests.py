@@ -1,11 +1,16 @@
-from fastapi import APIRouter, Depends, status
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.models.procurement_request import ProcurementRequest
+from app.schemas.procurement_eligibility import ProcurementEligibilityResponse
 from app.schemas.procurement_request import (
     ProcurementRequestCreate,
     ProcurementRequestResponse,
 )
+from app.services.procurement_eligibility import evaluate_eligible_centres
 from app.services.procurement_request import create_procurement_request
 
 router = APIRouter(
@@ -33,4 +38,34 @@ def create_request(
 
     return ProcurementRequestResponse.model_validate(
         procurement_request
+    )
+
+
+@router.get(
+    "/{request_id}/eligibility",
+    response_model=ProcurementEligibilityResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Evaluate eligible procurement centres",
+)
+def evaluate_request_eligibility(
+    request_id: UUID,
+    db: Session = Depends(get_db),
+) -> ProcurementEligibilityResponse:
+    """Evaluate which active centres can handle a procurement request."""
+
+    procurement_request = (
+        db.query(ProcurementRequest)
+        .filter(ProcurementRequest.id == request_id)
+        .first()
+    )
+
+    if procurement_request is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Procurement request not found",
+        )
+
+    return evaluate_eligible_centres(
+        db=db,
+        procurement_request=procurement_request,
     )
