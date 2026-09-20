@@ -14,11 +14,20 @@ from app.schemas.procurement_request import (
     ProcurementRequestCreate,
     ProcurementRequestResponse,
 )
+from app.schemas.queue import (
+    CallNextRequest,
+    CentreQueueResponse,
+    CheckInRequest,
+    CheckInResponse,
+    QueueEntryResponse,
+    QueueStatusUpdateRequest,
+)
 from app.schemas.slot_booking import (
     ProcurementRequestCancelResponse,
     SlotConfirmRequest,
     SlotConfirmResponse,
 )
+from app.schemas.token import TokenResponse
 
 __all__ = [
     "EligibleCentreCandidate",
@@ -32,4 +41,11 @@ __all__ = [
     "SlotConfirmRequest",
     "SlotConfirmResponse",
     "ProcurementRequestCancelResponse",
-]
+    "TokenResponse",
+    "CheckInRequest",
+    "CheckInResponse",
+    "QueueEntryResponse",
+    "CentreQueueResponse",
+    "CallNextRequest",
+    "QueueStatusUpdateRequest",
+]

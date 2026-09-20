@@ -1,7 +1,10 @@
 from datetime import date
+from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+
+from app.schemas.token import TokenResponse
 
 
 class SlotConfirmRequest(BaseModel):
@@ -22,6 +25,7 @@ class SlotConfirmResponse(BaseModel):
     slot_window: str
     booked_quantity: float
     status: str
+    token: Optional[TokenResponse] = None
 
 
 class ProcurementRequestCancelResponse(BaseModel):

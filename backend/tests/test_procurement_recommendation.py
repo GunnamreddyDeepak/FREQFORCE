@@ -41,7 +41,9 @@ def test_get_centre_distances_returns_distance(
 
         assert len(rows) >= 1
 
-        centre, distance_km = rows[0]
+        matching = [r for r in rows if r[0].id == data["centre_id"]]
+        assert len(matching) == 1
+        centre, distance_km = matching[0]
 
         assert centre.id == data["centre_id"]
         assert distance_km < 0.001
@@ -92,7 +94,9 @@ def test_get_centre_distances_calculates_nonzero_distance(
 
         assert len(rows) >= 1
 
-        returned_centre, distance_km = rows[0]
+        matching = [r for r in rows if r[0].id == centre.id]
+        assert len(matching) == 1
+        returned_centre, distance_km = matching[0]
 
         assert returned_centre.id == centre.id
         assert distance_km > 0
