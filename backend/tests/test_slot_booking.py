@@ -63,8 +63,10 @@ def test_confirm_slot_success(eligibility_test_data):
         assert data["procurement_request_id"] == str(request_id)
         assert data["centre_id"] == str(centre_id)
         assert data["slot_id"] == str(target_slot.id)
-        assert data["status"] == "SLOT_CONFIRMED"
+        assert data["status"] == "TOKEN_GENERATED"
         assert data["booked_quantity"] == 20.0
+        assert data["token"] is not None
+        assert data["token"]["token_number"].startswith("KQ-")
 
         # Verify Database state
         db.expire_all()
@@ -73,7 +75,7 @@ def test_confirm_slot_success(eligibility_test_data):
             .filter(ProcurementRequest.id == request_id)
             .one()
         )
-        assert reloaded_req.status == "SLOT_CONFIRMED"
+        assert reloaded_req.status == "TOKEN_GENERATED"
         assert reloaded_req.confirmed_centre_id == centre_id
         assert reloaded_req.confirmed_slot_id == target_slot.id
 

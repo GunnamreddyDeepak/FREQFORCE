@@ -11,14 +11,18 @@ from app.models.procurement_request import (
     ProcurementRequest,
     ProcurementRequestStatus,
 )
+from app.models.queue_entry import QueueEntry, QueueStatus
+from app.models.token import Token, TokenStatus
 from app.schemas.slot_booking import (
     ProcurementRequestCancelResponse,
     SlotConfirmResponse,
 )
+from app.schemas.token import TokenResponse
 from app.services.procurement_eligibility import evaluate_eligible_centres
 from app.services.procurement_request_state import (
     transition_procurement_request,
 )
+from app.services.token import allocate_token
 
 
 def confirm_procurement_slot(
@@ -27,14 +31,16 @@ def confirm_procurement_slot(
     centre_id: UUID,
     slot_id: UUID,
 ) -> SlotConfirmResponse:
-    """Atomically confirm an operational slot for a procurement request.
+    """Atomically confirm an operational slot and issue an arrival token for a procurement request.
 
-    Enforces strict canonical lock order:
+    Enforces strict canonical lock order (partial ascending order):
     1. ProcurementRequest (FOR UPDATE)
     2. CentreSlot (FOR UPDATE)
     3. CentreCapacity (FOR UPDATE)
+    4. TokenSequence (FOR UPDATE via allocate_token)
 
-    Validates eligibility, dual-level capacity bounds, and state transitions atomically.
+    Validates eligibility, dual-level capacity bounds, and FSM transitions atomically:
+    REQUESTED -> ELIGIBILITY_CHECKED -> CENTRE_RECOMMENDED -> SLOT_CONFIRMED -> TOKEN_GENERATED.
     """
     # 1. Lock ProcurementRequest
     procurement_request = (
@@ -50,12 +56,15 @@ def confirm_procurement_slot(
         )
 
     # 2. Idempotency & Conflict Checks on Request
-    if procurement_request.status == ProcurementRequestStatus.SLOT_CONFIRMED.value:
+    if procurement_request.status in (
+        ProcurementRequestStatus.SLOT_CONFIRMED.value,
+        ProcurementRequestStatus.TOKEN_GENERATED.value,
+    ):
         if (
             procurement_request.confirmed_slot_id == slot_id
             and procurement_request.confirmed_centre_id == centre_id
         ):
-            # Idempotent replay: return existing confirmation
+            # Idempotent replay: return existing confirmation and token
             slot = (
                 db.query(CentreSlot)
                 .filter(CentreSlot.id == slot_id)
@@ -66,12 +75,18 @@ def confirm_procurement_slot(
                 .filter(ProcurementCentre.id == centre_id)
                 .first()
             )
+            token = (
+                db.query(Token)
+                .filter(Token.procurement_request_id == procurement_request.id)
+                .first()
+            )
             centre_name = centre.name if centre else "Procurement Centre"
             slot_window = (
                 f"{slot.start_time.strftime('%H:%M:%S')} - {slot.end_time.strftime('%H:%M:%S')}"
                 if slot
                 else ""
             )
+            token_response = TokenResponse.model_validate(token) if token else None
             return SlotConfirmResponse(
                 procurement_request_id=procurement_request.id,
                 centre_id=centre_id,
@@ -81,6 +96,7 @@ def confirm_procurement_slot(
                 slot_window=slot_window,
                 booked_quantity=float(procurement_request.requested_quantity),
                 status=procurement_request.status,
+                token=token_response,
             )
         else:
             raise HTTPException(
@@ -226,9 +242,25 @@ def confirm_procurement_slot(
         db=db,
     )
 
+    # 11. Step 4 State Transition & Token Issuance: SLOT_CONFIRMED -> TOKEN_GENERATED
+    transition_procurement_request(
+        procurement_request=procurement_request,
+        target_status=ProcurementRequestStatus.TOKEN_GENERATED,
+        db=db,
+    )
+
+    # 12. Allocate Monotonic Sequence & Insert Token
+    token = allocate_token(
+        db=db,
+        centre=centre,
+        slot=slot,
+        procurement_request=procurement_request,
+    )
+
     db.commit()
     db.refresh(procurement_request)
     db.refresh(slot)
+    db.refresh(token)
 
     slot_window = (
         f"{slot.start_time.strftime('%H:%M:%S')} - {slot.end_time.strftime('%H:%M:%S')}"
@@ -243,6 +275,7 @@ def confirm_procurement_slot(
         slot_window=slot_window,
         booked_quantity=float(procurement_request.requested_quantity),
         status=procurement_request.status,
+        token=TokenResponse.model_validate(token),
     )
 
 
@@ -250,13 +283,16 @@ def cancel_procurement_request(
     db: Session,
     request_id: UUID,
 ) -> ProcurementRequestCancelResponse:
-    """Atomically cancel a procurement request and release reserved capacity if confirmed.
+    """Atomically cancel a procurement request and release reserved capacity and token.
 
-    Enforces lock order:
+    Enforces ascending partial lock order:
     1. ProcurementRequest (FOR UPDATE)
     2. CentreSlot (FOR UPDATE)
     3. CentreCapacity (FOR UPDATE)
+    4. Token (FOR UPDATE)
+    5. QueueEntry (FOR UPDATE)
     """
+    # 1. Lock ProcurementRequest
     procurement_request = (
         db.query(ProcurementRequest)
         .filter(ProcurementRequest.id == request_id)
@@ -281,17 +317,17 @@ def cancel_procurement_request(
         ProcurementRequestStatus.ELIGIBILITY_CHECKED.value,
         ProcurementRequestStatus.CENTRE_RECOMMENDED.value,
         ProcurementRequestStatus.SLOT_CONFIRMED.value,
+        ProcurementRequestStatus.TOKEN_GENERATED.value,
+        ProcurementRequestStatus.CHECKED_IN.value,
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Cannot cancel procurement request in status '{procurement_request.status}'",
         )
 
-    # If slot was confirmed, release slot and daily capacity
-    if (
-        procurement_request.status == ProcurementRequestStatus.SLOT_CONFIRMED.value
-        and procurement_request.confirmed_slot_id is not None
-    ):
+    # 2. Lock CentreSlot & 3. Lock CentreCapacity if slot confirmed
+    slot = None
+    if procurement_request.confirmed_slot_id is not None:
         slot = (
             db.query(CentreSlot)
             .filter(CentreSlot.id == procurement_request.confirmed_slot_id)
@@ -322,6 +358,32 @@ def cancel_procurement_request(
                     Decimal("0.000"), capacity.committed_quantity - req_qty
                 )
 
+    # 4. Lock Token & update status if present
+    token = (
+        db.query(Token)
+        .filter(Token.procurement_request_id == procurement_request.id)
+        .with_for_update()
+        .first()
+    )
+    if token is not None:
+        token.status = TokenStatus.CANCELLED.value
+
+    # 5. Lock QueueEntry & update status if present
+    queue_entry = (
+        db.query(QueueEntry)
+        .filter(QueueEntry.procurement_request_id == procurement_request.id)
+        .with_for_update()
+        .first()
+    )
+    if queue_entry is not None:
+        if queue_entry.status in (QueueStatus.PROCESSING.value, QueueStatus.COMPLETED.value):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Cannot cancel request in queue status '{queue_entry.status}'",
+            )
+        queue_entry.status = QueueStatus.CANCELLED.value
+
+    # Transition ProcurementRequest to CANCELLED
     transition_procurement_request(
         procurement_request=procurement_request,
         target_status=ProcurementRequestStatus.CANCELLED,

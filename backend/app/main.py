@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.db.session import check_database_connection, check_postgis_available
+from app.api.centre_queue import router as centre_queue_router
 from app.api.centre_slots import router as centre_slots_router
 from app.api.procurement_requests import router as procurement_requests_router
 
@@ -17,7 +18,7 @@ app = FastAPI(
 
 app.include_router(procurement_requests_router)
 app.include_router(centre_slots_router)
-
+app.include_router(centre_queue_router)
 
 
 @app.get("/health", summary="Basic service liveness check")
