@@ -10,8 +10,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base_class import Base
 
 if TYPE_CHECKING:
+    from app.models.centre_slot import CentreSlot
     from app.models.commodity import Commodity
     from app.models.farmer import Farmer
+    from app.models.procurement_centre import ProcurementCentre
 
 
 class ProcurementRequestStatus(str, enum.Enum):
@@ -96,6 +98,22 @@ class ProcurementRequest(Base):
         comment="Current procurement request workflow status",
     )
 
+    confirmed_centre_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("procurement_centres.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Procurement centre confirmed for booking",
+    )
+
+    confirmed_slot_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("centre_slots.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Slot confirmed for booking",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -117,6 +135,16 @@ class ProcurementRequest(Base):
 
     commodity: Mapped["Commodity"] = relationship(
         "Commodity",
+    )
+
+    confirmed_centre: Mapped["ProcurementCentre | None"] = relationship(
+        "ProcurementCentre",
+        foreign_keys=[confirmed_centre_id],
+    )
+
+    confirmed_slot: Mapped["CentreSlot | None"] = relationship(
+        "CentreSlot",
+        foreign_keys=[confirmed_slot_id],
     )
 
     def __repr__(self) -> str:
