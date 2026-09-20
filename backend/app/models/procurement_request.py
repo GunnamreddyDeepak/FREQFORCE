@@ -1,3 +1,4 @@
+import enum
 import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
@@ -11,6 +12,29 @@ from app.db.base_class import Base
 if TYPE_CHECKING:
     from app.models.commodity import Commodity
     from app.models.farmer import Farmer
+
+
+class ProcurementRequestStatus(str, enum.Enum):
+    """Authoritative lifecycle states for a procurement request."""
+
+    # Primary workflow path
+    REQUESTED = "REQUESTED"
+    ELIGIBILITY_CHECKED = "ELIGIBILITY_CHECKED"
+    CENTRE_RECOMMENDED = "CENTRE_RECOMMENDED"
+    SLOT_CONFIRMED = "SLOT_CONFIRMED"
+    TOKEN_GENERATED = "TOKEN_GENERATED"
+    CHECKED_IN = "CHECKED_IN"
+    WEIGHED = "WEIGHED"
+    QUALITY_TESTED = "QUALITY_TESTED"
+    BILLED = "BILLED"
+    PAYMENT_INITIATED = "PAYMENT_INITIATED"
+    PAYMENT_COMPLETED = "PAYMENT_COMPLETED"
+
+    # Exceptional & terminal states
+    CANCELLED = "CANCELLED"
+    QUALITY_EXCEPTION = "QUALITY_EXCEPTION"
+    WEIGHMENT_EXCEPTION = "WEIGHMENT_EXCEPTION"
+    PAYMENT_FAILED = "PAYMENT_FAILED"
 
 
 class ProcurementRequest(Base):
@@ -67,7 +91,7 @@ class ProcurementRequest(Base):
     status: Mapped[str] = mapped_column(
         String(32),
         nullable=False,
-        default="REQUESTED",
+        default=ProcurementRequestStatus.REQUESTED.value,
         index=True,
         comment="Current procurement request workflow status",
     )

@@ -5,7 +5,10 @@ from app.models.centre_capacity import CentreCapacity
 from app.models.centre_commodity import CentreCommodity
 from app.models.commodity import Commodity
 from app.models.procurement_centre import ProcurementCentre
-from app.models.procurement_request import ProcurementRequest
+from app.models.procurement_request import (
+    ProcurementRequest,
+    ProcurementRequestStatus,
+)
 from app.schemas.procurement_eligibility import (
     EligibleCentreCandidate,
     ProcurementEligibilityResponse,
@@ -28,7 +31,7 @@ def evaluate_eligible_centres(
     This service does not rank or recommend centres.
     """
 
-    if procurement_request.status != "REQUESTED":
+    if procurement_request.status != ProcurementRequestStatus.REQUESTED.value:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Procurement request is not in REQUESTED status",

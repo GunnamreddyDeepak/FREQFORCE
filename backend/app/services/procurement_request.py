@@ -6,7 +6,10 @@ from sqlalchemy.orm import Session
 
 from app.models.commodity import Commodity
 from app.models.farmer import Farmer
-from app.models.procurement_request import ProcurementRequest
+from app.models.procurement_request import (
+    ProcurementRequest,
+    ProcurementRequestStatus,
+)
 from app.schemas.procurement_request import ProcurementRequestCreate
 
 
@@ -57,11 +60,11 @@ def create_procurement_request(
         requested_quantity=request_data.requested_quantity,
         preferred_date=request_data.preferred_date,
         farmer_location=location,
-        status="REQUESTED",
+        status=ProcurementRequestStatus.REQUESTED.value,
     )
 
     db.add(procurement_request)
     db.commit()
     db.refresh(procurement_request)
 
-    return procurement_request
+    return procurement_request
